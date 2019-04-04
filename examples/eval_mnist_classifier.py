@@ -6,11 +6,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 def imshow(img):
-    img = img / 2 + 0.5     # unnormalize
+    img = (img + 1.0) / 2.0  # unnormalize
     npimg = img.numpy()
-    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.imshow(img, cmap='gray', interpolation='None')
     plt.show()
 
 
@@ -33,22 +36,29 @@ class Net(nn.Module):
         return x
 
 
-def test(model, device, test_loader):
+def quantize(x, q):
+    y = 255.0 * ((x + 1.0) / 2.0)  # unnormalize to [0, 255]
+    y = torch.clamp(torch.round(y / q) * q, min=0.0, max=255.0)  # quantization
+    y = 2.0 * y / 255.0 - 1.0  # normalize
+
+    return y
+
+
+def test(model, device, test_loader, q):
     correct = 0
 
     with torch.no_grad():
         for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
+            quantized_data = quantize(data, q)
 
-            # TODO: quantize and dequantize the images stored in 'data'
-
-            output = model(data)
+            quantized_data, target = quantized_data.to(device), target.to(device)
+            output = model(quantized_data)
 
             # get the index of the max log-probability
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
 
-    print('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
+    print('Test set: Accuracy: {}/{} ({:.0f}%)'.format(
           correct, len(test_loader.dataset),
           100. * correct / len(test_loader.dataset)))
 
@@ -75,7 +85,9 @@ def main():
                        ])),
         batch_size=1000, shuffle=False, **kwargs)
 
-    test(model, device, test_loader)
+    for q in range(400, 520, 10):
+        print('Quantizer:', q)
+        test(model, device, test_loader, q)
 
 
 if __name__ == '__main__':
