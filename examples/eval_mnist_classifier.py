@@ -40,6 +40,8 @@ def test(model, device, test_loader):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
 
+            # TODO: quantize and dequantize the images stored in 'data'
+
             output = model(data)
 
             # get the index of the max log-probability
@@ -71,7 +73,7 @@ def main():
                            transforms.ToTensor(),
                            transforms.Normalize((0.5,), (0.5,))
                        ])),
-        batch_size=1, shuffle=False, **kwargs)
+        batch_size=1000, shuffle=False, **kwargs)
 
     test(model, device, test_loader)
 
