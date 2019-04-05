@@ -86,9 +86,9 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
+    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                         help='learning rate (default: 0.001)')
-    parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
+    parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
@@ -112,7 +112,7 @@ def main():
                                               shuffle=True, **kwargs)
     test_set = torchvision.datasets.CIFAR10(root='./data', train=False,
                                             download=True, transform=transform)
-    test_loader = torch.utils.data.DataLoader(train_set, batch_size=args.test_batch_size,
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.test_batch_size,
                                              shuffle=False, **kwargs)
 
     classes = ('plane', 'car', 'bird', 'cat',
