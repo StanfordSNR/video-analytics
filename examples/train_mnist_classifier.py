@@ -8,6 +8,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 
 
+# input image is 28x28, grayscale
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -15,8 +16,14 @@ class Net(nn.Module):
         self.conv2 = nn.Conv2d(20, 50, 5)
         self.fc1 = nn.Linear(4*4*50, 500)
         self.fc2 = nn.Linear(500, 10)
+        self.q = nn.Parameter(torch.randint(1, 510, (28, 28),
+                              dtype=torch.float))
 
     def forward(self, x):
+        x = 255.0 * x
+        x = torch.clamp(torch.round(x / self.q) * self.q, min=0.0, max=255.0)
+        x = 2.0 * x / 255.0 - 1.0
+
         x = F.relu(self.conv1(x))
         x = F.max_pool2d(x, 2, 2)
         x = F.relu(self.conv2(x))
@@ -29,12 +36,13 @@ class Net(nn.Module):
 
 def train(args, model, device, train_loader, criterion, optimizer, epoch):
     model.train()
+
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
 
         optimizer.zero_grad()
         output = model(data)
-        loss = criterion(output, target)
+        loss = criterion(output, target) - 0.01 * model.q.mean() / 255.0
         loss.backward()
         optimizer.step()
 
@@ -69,7 +77,7 @@ def test(args, model, device, test_loader, criterion):
 
 
 def main():
-    # Training settings
+    # training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -84,29 +92,29 @@ def main():
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=False,
-                        help='For saving the current Model')
+                        help='For saving the current model')
     args = parser.parse_args()
 
     # whether CUDA is available
     use_cuda = torch.cuda.is_available()
+    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     device = torch.device('cuda:0' if use_cuda else 'cpu')
 
-    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+    # datasets
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('./data', train=True, download=True,
                        transform=transforms.Compose([
                            transforms.ToTensor(),
-                           transforms.Normalize((0.5,), (0.5,))
                        ])),
         batch_size=args.batch_size, shuffle=True, **kwargs)
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST('./data', train=False, download=True,
                        transform=transforms.Compose([
                            transforms.ToTensor(),
-                           transforms.Normalize((0.5,), (0.5,))
                        ])),
         batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
+    # model
     model = Net().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(),
