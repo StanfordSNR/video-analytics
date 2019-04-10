@@ -22,7 +22,7 @@ def imshow(img):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.q = nn.Parameter(torch.randint(1, 510, (32, 32), dtype=torch.float))
+        self.q = nn.Parameter(torch.randint(1, 255, (32, 32), dtype=torch.float))
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
@@ -56,7 +56,7 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
 
         optimizer.zero_grad()
         output = model(data)
-        loss = criterion(output, target) + 0.1 * torch.sum(model.q)
+        loss = criterion(output, target) - 0.1 * torch.sum(model.q)
         loss.backward()
         optimizer.step()
 
@@ -95,8 +95,8 @@ def main():
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=10, metavar='N',
-                        help='number of epochs to train (default: 10)')
+    parser.add_argument('--epochs', type=int, default=100, metavar='N',
+                        help='number of epochs to train (default: 100)')
     parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                         help='learning rate (default: 0.001)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
