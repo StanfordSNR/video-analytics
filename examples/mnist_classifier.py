@@ -7,7 +7,18 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
+import matplotlib.pyplot as plt
+import numpy as np
 
+
+def imshow(img):
+    img = (img + 1.0) / 2.0  # unnormalize
+    npimg = img.numpy()
+    plt.imshow(img, cmap='gray', interpolation='None')
+    plt.show()
+
+
+# input image is 28x28, grayscale
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -29,6 +40,7 @@ class Net(nn.Module):
 
 def train(args, model, device, train_loader, criterion, optimizer, epoch):
     model.train()
+
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
 
@@ -46,6 +58,7 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
 
 def test(args, model, device, test_loader, criterion):
     model.eval()
+
     test_loss = 0
     correct = 0
 
@@ -69,7 +82,7 @@ def test(args, model, device, test_loader, criterion):
 
 
 def main():
-    # Training settings
+    # training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -83,15 +96,17 @@ def main():
                         help='SGD momentum (default: 0.5)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--save-model', action='store_true', default=False,
-                        help='For saving the current Model')
+    parser.add_argument('--save-model',
+                        help='For saving the current model')
+    parser.add_argument('--load-model',
+                        help='Load a classifier for MNIST')
     args = parser.parse_args()
 
     # whether CUDA is available
     use_cuda = torch.cuda.is_available()
+    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     device = torch.device('cuda:0' if use_cuda else 'cpu')
 
-    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('./data', train=True, download=True,
                        transform=transforms.Compose([
@@ -109,15 +124,22 @@ def main():
 
     model = Net().to(device)
     criterion = nn.CrossEntropyLoss()
+
+    # inference only
+    if args.load_model:
+        model.load_state_dict(torch.load(args.load_model))
+        test(args, model, device, test_loader, criterion)
+        return
+
+    # training
     optimizer = optim.SGD(model.parameters(),
                           lr=args.lr, momentum=args.momentum)
-
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, criterion, optimizer, epoch)
         test(args, model, device, test_loader, criterion)
 
     if args.save_model:
-        torch.save(model.state_dict(), 'mnist_cnn.pt')
+        torch.save(model.state_dict(), args.save_model)
 
 
 if __name__ == '__main__':
