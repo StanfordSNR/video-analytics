@@ -12,31 +12,36 @@ import numpy as np
 
 from models import *
 
+
 class Floor(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
         return torch.floor(input)
+
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output
 
+
 class QuantizeNet(nn.Module):
-    def __init__(self, m):
+    def __init__(self, model):
         super(QuantizeNet, self).__init__()
-        self.delta =  nn.Parameter(torch.randint(1, 255, (1,), dtype=torch.float))
+        self.delta = nn.Parameter(1 - torch.rand(1))
         self.floor = Floor.apply
-        self.m = m
+        self.model = model
 
     def forward(self, x):
         encoded = self.floor(x / self.delta)
         decoded = self.delta * (encoded + 0.5)
-        return self.m(decoded)
+        return self.model(decoded)
+
 
 def imshow(img):
     img = (img + 1.0) / 2.0  # unnormalize
     npimg = img.numpy()
     plt.imshow(np.transpose(npimg, (1, 2, 0)))
     plt.show()
+
 
 def train(args, model, device, train_loader, criterion, optimizer, epoch):
     model.train()
@@ -54,6 +59,7 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                   epoch, batch_idx * len(data), len(train_loader.dataset),
                   100. * batch_idx / len(train_loader), loss.item()))
+            print(model.delta)
 
 
 def test(args, model, device, test_loader, criterion):
@@ -90,8 +96,8 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
-                        help='learning rate (default: 0.1)')
+    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
+                        help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
