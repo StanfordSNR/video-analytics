@@ -22,7 +22,10 @@ def imshow(img):
 def train(args, model, device, train_loader, criterion, optimizer, epoch):
     model.train()
 
+    total_data_cnt = 0
+
     for batch_idx, (data, target) in enumerate(train_loader):
+        total_data_cnt += len(data)
         data, target = data.to(device), target.to(device)
 
         optimizer.zero_grad()
@@ -31,10 +34,12 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
         loss.backward()
         optimizer.step()
 
-        if batch_idx % args.log_interval == 0:
+        if ((batch_idx + 1) % args.log_interval == 0 or
+                total_data_cnt == len(train_loader.dataset)):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                  epoch, batch_idx * len(data), len(train_loader.dataset),
-                  100. * batch_idx / len(train_loader), loss.item()))
+                  epoch, total_data_cnt, len(train_loader.dataset),
+                  100. * total_data_cnt / len(train_loader.dataset),
+                  loss.item()))
 
 
 def test(args, model, device, test_loader, criterion):
@@ -71,8 +76,8 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
-                        help='learning rate (default: 0.1)')
+    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
+                        help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
