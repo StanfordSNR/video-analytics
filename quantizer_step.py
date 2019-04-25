@@ -32,6 +32,9 @@ class Floor(torch.autograd.Function):
         # Fourier series expansion
         # grad_input *= 1 + 2 * torch.cos(2 * math.pi * input)
 
+        # log
+        grad_input *= 1.0 / (input + 1.0)
+
         return grad_input
 
 
@@ -50,7 +53,7 @@ class Quantizer(nn.Module):
 def main():
     batch_size = 128
     lr = 0.01
-    epochs = 10000
+    epochs = 100000
 
     # whether CUDA is available
     use_cuda = torch.cuda.is_available()
@@ -78,7 +81,7 @@ def main():
             print('Epoch: {}, Loss: {:.6f}'.format(epoch, loss.item()))
             print(model.delta, model.delta.grad)
 
-            if model.delta.item() < 0.001:
+            if abs(model.delta.item()) < 0.0001:
                 print('Done {} epochs'.format(epoch))
                 return
 
