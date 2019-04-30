@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-
-import matplotlib.pyplot as plt
-import numpy as np
 
 from models import *
 
@@ -24,16 +24,16 @@ class Floor(torch.autograd.Function):
 
 
 class QuantizeNet(nn.Module):
-    def __init__(self, model):
+    def __init__(self, classifier):
         super(QuantizeNet, self).__init__()
-        self.delta = nn.Parameter(1 - torch.rand(1))
-        self.floor = Floor.apply
-        self.model = model
+        self.delta = nn.Parameter(1 - torch.rand(1))  # (0, 1]
+        self.floor = Floor.apply  # custom floor function
+        self.classifier = classifier  # original classifier on CIFAR-10
 
     def forward(self, x):
         encoded = self.floor(x / self.delta)
         decoded = self.delta * (encoded + 0.5)
-        return self.model(decoded)
+        return self.classifier(decoded)
 
 
 def imshow(img):
@@ -46,11 +46,14 @@ def imshow(img):
 def train(args, model, device, train_loader, criterion, optimizer, epoch):
     model.train()
 
+    batch_idx = 0
     total_data_cnt = 0
 
-    for batch_idx, (data, target) in enumerate(train_loader):
-        total_data_cnt += len(data)
+    for data, target in train_loader:
         data, target = data.to(device), target.to(device)
+
+        batch_idx += 1
+        total_data_cnt += len(data)
 
         optimizer.zero_grad()
         output = model(data)
@@ -58,13 +61,14 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
         loss.backward()
         optimizer.step()
 
-        if ((batch_idx + 1) % args.log_interval == 0 or
+        if (batch_idx % args.log_interval == 0 or
                 total_data_cnt == len(train_loader.dataset)):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                   epoch, total_data_cnt, len(train_loader.dataset),
-                  100. * total_data_cnt / len(train_loader.dataset),
+                  100.0 * total_data_cnt / len(train_loader.dataset),
                   loss.item()))
-            print(model.delta, model.delta.grad)
+            print('Delta: {:.3f}, Gradient: {:.3f}'.format(
+                  model.delta.item(), model.delta.grad.item()))
 
 
 def test(args, model, device, test_loader, criterion):
@@ -87,9 +91,9 @@ def test(args, model, device, test_loader, criterion):
 
     test_loss /= len(test_loader.dataset)
 
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+    print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
           test_loss, correct, len(test_loader.dataset),
-          100. * correct / len(test_loader.dataset)))
+          100.0 * correct / len(test_loader.dataset)))
 
 
 def main():
@@ -106,16 +110,17 @@ def main():
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
-    parser.add_argument('--save-model', help='save the current model')
+                        help='batches to wait before logging training status')
+    parser.add_argument('--save-model', help='save the trained model')
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
 
-    # whether CUDA is available
+    # use CUDA if available
     use_cuda = torch.cuda.is_available()
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     device = torch.device('cuda:0' if use_cuda else 'cpu')
 
+    # load CIFAR-10 dataset
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10('./data', train=True, download=True,
             transform=transforms.Compose([
@@ -131,6 +136,7 @@ def main():
             ])),
         batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
+    # initialize model
     model = QuantizeNet(ResNet18())
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
