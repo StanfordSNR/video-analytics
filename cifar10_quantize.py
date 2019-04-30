@@ -13,6 +13,9 @@ from torchvision import datasets, transforms
 from models import *
 
 
+fixed_delta = None
+
+
 class Floor(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
@@ -26,14 +29,18 @@ class Floor(torch.autograd.Function):
 class QuantizeNet(nn.Module):
     def __init__(self, classifier):
         super(QuantizeNet, self).__init__()
-        self.delta = nn.Parameter(1 - torch.rand(1))  # (0, 1]
+        if fixed_delta is None:
+            self.delta = nn.Parameter(1 - torch.rand(1))  # (0, 1]
+        else:
+            self.delta = fixed_delta
+
         self.floor = Floor.apply  # custom floor function
         self.classifier = classifier  # original classifier on CIFAR-10
 
     def forward(self, x):
-        encoded = self.floor(x / self.delta)
-        decoded = self.delta * (encoded + 0.5)
-        return self.classifier(decoded)
+        x = self.floor(x / self.delta)
+        x = self.delta * (x + 0.5)
+        return self.classifier(x)
 
 
 def imshow(img):
@@ -63,12 +70,13 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
 
         if (batch_idx % args.log_interval == 0 or
                 total_data_cnt == len(train_loader.dataset)):
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+            print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}'.format(
                   epoch, total_data_cnt, len(train_loader.dataset),
                   100.0 * total_data_cnt / len(train_loader.dataset),
                   loss.item()))
-            print('Delta: {:.3f}, Gradient: {:.3f}'.format(
-                  model.delta.item(), model.delta.grad.item()))
+            if fixed_delta is None:
+                print('Delta: {:.3f}, Gradient: {:.3f}'.format(
+                      model.delta.item(), model.delta.grad.item()))
 
 
 def test(args, model, device, test_loader, criterion):
@@ -91,7 +99,7 @@ def test(args, model, device, test_loader, criterion):
 
     test_loss /= len(test_loader.dataset)
 
-    print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
+    print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)'.format(
           test_loss, correct, len(test_loader.dataset),
           100.0 * correct / len(test_loader.dataset)))
 
@@ -103,17 +111,23 @@ def main():
                         help='input batch size for training (default: 128)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=10, metavar='N',
-                        help='number of epochs to train (default: 10)')
+    parser.add_argument('--epochs', type=int, default=50, metavar='N',
+                        help='number of epochs to train (default: 50)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='batches to wait before logging training status')
+    parser.add_argument('--delta', type=float,
+                        help='set a fixed step size used in quantizer')
     parser.add_argument('--save-model', help='save the trained model')
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
+
+    global fixed_delta
+    if args.delta:
+        fixed_delta = args.delta
 
     # use CUDA if available
     use_cuda = torch.cuda.is_available()
