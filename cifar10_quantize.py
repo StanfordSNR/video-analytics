@@ -14,6 +14,7 @@ from models import *
 
 
 fixed_delta = None
+add_transform = False
 
 
 class Floor(torch.autograd.Function):
@@ -26,6 +27,23 @@ class Floor(torch.autograd.Function):
         return grad_output
 
 
+class Transform(nn.Module):
+    def __init__(self):
+        super(Transform, self).__init__()
+        self.linear1 = nn.Linear(32 * 32, 32 * 32)
+        self.linear2 = nn.Linear(32 * 32, 32 * 32)
+
+    def forward(self, x):
+        input_shape = x.shape
+        # convert [batch, colors (3), width (32), height (32)]
+        # to [batch, colors (3), width * height (32 * 32)]
+        x = x.view(list(x.shape[:2]) + [-1])
+        x = F.relu(self.linear1(x))
+        x = self.linear2(x)
+        x = x.view(input_shape)
+        return x
+
+
 class QuantizeNet(nn.Module):
     def __init__(self, classifier):
         super(QuantizeNet, self).__init__()
@@ -34,10 +52,13 @@ class QuantizeNet(nn.Module):
         else:
             self.delta = fixed_delta
 
+        self.transform = Transform()  # custom transform
         self.floor = Floor.apply  # custom floor function
         self.classifier = classifier  # original classifier on CIFAR-10
 
     def forward(self, x):
+        if add_transform:
+            x = self.transform(x)
         x = self.floor(x / self.delta)
         x = self.delta * (x + 0.5)
         return self.classifier(x)
@@ -121,6 +142,8 @@ def main():
                         help='batches to wait before logging training status')
     parser.add_argument('--delta', type=float,
                         help='set a fixed step size used in quantizer')
+    parser.add_argument('--transform', action='store_true',
+                        help='add a transform layer')
     parser.add_argument('--save-model', help='save the trained model')
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
@@ -128,6 +151,10 @@ def main():
     global fixed_delta
     if args.delta:
         fixed_delta = args.delta
+
+    global add_transform
+    if args.transform:
+        add_transform = args.transform
 
     # use CUDA if available
     use_cuda = torch.cuda.is_available()
