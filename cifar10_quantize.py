@@ -31,23 +31,19 @@ class Floor(torch.autograd.Function):
 class Transform(nn.Module):
     def __init__(self):
         super(Transform, self).__init__()
-        # 8*8 filter
-        self.c = nn.Parameter(torch.randn(3, 8, 8))
+        self.linear = nn.Linear(8*8, 8*8)
 
     def forward(self, x):
-        y = torch.zeros(x.shape).to(device)
-
-        # 4*4 macblocks in a 32*32 image
+        # divide each 32*32 image into 4*4 macroblocks of size 8*8
         for i in range(4):
             for j in range(4):
-                b = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)]
+                mb = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)].clone()
+                mb = mb.view(x.shape[0], x.shape[1], 8*8)
+                mb = self.linear(mb)
+                mb = mb.view(x.shape[0], x.shape[1], 8, 8)
+                x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = mb
 
-                # DCT-like linear transformation
-                b = self.c * b * torch.transpose(self.c, 1, 2)
-
-                y[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = b
-
-        return y
+        return x
 
 
 class QuantizeNet(nn.Module):
