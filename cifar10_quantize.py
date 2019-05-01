@@ -13,8 +13,8 @@ from torchvision import datasets, transforms
 from models import *
 
 
-fixed_delta = None
-add_transform = False
+delta = None
+transform = False
 
 
 class Floor(torch.autograd.Function):
@@ -30,34 +30,38 @@ class Floor(torch.autograd.Function):
 class Transform(nn.Module):
     def __init__(self):
         super(Transform, self).__init__()
-        self.linear1 = nn.Linear(32 * 32, 32 * 32)
-        self.linear2 = nn.Linear(32 * 32, 32 * 32)
+        # 8*8 filter
+        self.c = nn.Parameter(torch.randn(3, 8, 8))
 
     def forward(self, x):
-        input_shape = x.shape
-        # convert [batch, colors (3), width (32), height (32)]
-        # to [batch, colors (3), width * height (32 * 32)]
-        x = x.view(list(x.shape[:2]) + [-1])
-        x = F.relu(self.linear1(x))
-        x = self.linear2(x)
-        x = x.view(input_shape)
+        # 4*4 macblocks in a 32*32 image
+        for i in range(4):
+            for j in range(4):
+                # clone to avoid inplace operation
+                b = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)].clone()
+
+                # DCT-like linear transformation
+                b = self.c * b * torch.transpose(self.c, 1, 2)
+
+                x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = b
+
         return x
 
 
 class QuantizeNet(nn.Module):
     def __init__(self, classifier):
         super(QuantizeNet, self).__init__()
-        if fixed_delta is None:
+        if delta is None:
             self.delta = nn.Parameter(1 - torch.rand(1))  # (0, 1]
         else:
-            self.delta = fixed_delta
+            self.delta = delta
 
         self.transform = Transform()  # custom transform
         self.floor = Floor.apply  # custom floor function
         self.classifier = classifier  # original classifier on CIFAR-10
 
     def forward(self, x):
-        if add_transform:
+        if transform:
             x = self.transform(x)
         x = self.floor(x / self.delta)
         x = self.delta * (x + 0.5)
@@ -95,7 +99,7 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
                   epoch, total_data_cnt, len(train_loader.dataset),
                   100.0 * total_data_cnt / len(train_loader.dataset),
                   loss.item()))
-            if fixed_delta is None:
+            if delta is None:
                 print('Delta: {:.3f}, Gradient: {:.3f}'.format(
                       model.delta.item(), model.delta.grad.item()))
 
@@ -148,13 +152,13 @@ def main():
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
 
-    global fixed_delta
+    global delta
     if args.delta:
-        fixed_delta = args.delta
+        delta = args.delta
 
-    global add_transform
+    global transform
     if args.transform:
-        add_transform = args.transform
+        transform = args.transform
 
     # use CUDA if available
     use_cuda = torch.cuda.is_available()
