@@ -15,6 +15,7 @@ from models import *
 
 delta = None
 transform = False
+device = None
 
 
 class Floor(torch.autograd.Function):
@@ -34,18 +35,19 @@ class Transform(nn.Module):
         self.c = nn.Parameter(torch.randn(3, 8, 8))
 
     def forward(self, x):
+        y = torch.zeros(x.shape).to(device)
+
         # 4*4 macblocks in a 32*32 image
         for i in range(4):
             for j in range(4):
-                # clone to avoid inplace operation
-                b = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)].clone()
+                b = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)]
 
                 # DCT-like linear transformation
                 b = self.c * b * torch.transpose(self.c, 1, 2)
 
-                x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = b
+                y[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = b
 
-        return x
+        return y
 
 
 class QuantizeNet(nn.Module):
@@ -75,7 +77,7 @@ def imshow(img):
     plt.show()
 
 
-def train(args, model, device, train_loader, criterion, optimizer, epoch):
+def train(args, model, train_loader, criterion, optimizer, epoch):
     model.train()
 
     batch_idx = 0
@@ -104,7 +106,7 @@ def train(args, model, device, train_loader, criterion, optimizer, epoch):
                       model.delta.item(), model.delta.grad.item()))
 
 
-def test(args, model, device, test_loader, criterion):
+def test(args, model, test_loader, criterion):
     model.eval()
 
     test_loss = 0
@@ -163,6 +165,8 @@ def main():
     # use CUDA if available
     use_cuda = torch.cuda.is_available()
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+
+    global device
     device = torch.device('cuda:0' if use_cuda else 'cpu')
 
     # load CIFAR-10 dataset
@@ -189,15 +193,15 @@ def main():
     # inference only
     if args.load_model:
         model.load_state_dict(torch.load(args.load_model))
-        test(args, model, device, test_loader, criterion)
+        test(args, model, test_loader, criterion)
         return
 
     # training
     optimizer = optim.SGD(model.parameters(),
                           lr=args.lr, momentum=args.momentum)
     for epoch in range(1, args.epochs + 1):
-        train(args, model, device, train_loader, criterion, optimizer, epoch)
-        test(args, model, device, test_loader, criterion)
+        train(args, model, train_loader, criterion, optimizer, epoch)
+        test(args, model, test_loader, criterion)
 
     if args.save_model:
         torch.save(model.state_dict(), args.save_model)
