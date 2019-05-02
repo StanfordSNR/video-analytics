@@ -16,16 +16,37 @@ from models import *
 delta = None
 transform = False
 device = None
+grad_approx = 0
 
 
 class Floor(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
+        ctx.save_for_backward(input)
         return torch.floor(input)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return grad_output
+        input, = ctx.saved_tensors
+        grad_input = grad_output.clone()
+
+        # no approximation (zero gradient)
+        if grad_approx == 0:
+            grad_input *= 0
+        # linear
+        elif grad_approx == 1:
+            grad_input *= 1
+        # quadratic
+        elif grad_approx == 2:
+            grad_input *= 2 * (input - torch.floor(input))
+        # cubic
+        elif grad_approx == 3:
+            grad_input *= 3 * (input - torch.floor(input)) ** 2
+        # Fourier series
+        elif grad_approx == 4:
+            grad_input *= 1 + 2 * torch.cos(2 * math.pi * input)
+
+        return grad_input
 
 
 class Transform(nn.Module):
@@ -89,6 +110,7 @@ def train(args, model, train_loader, criterion, optimizer, epoch):
         output = model(data)
         loss = criterion(output, target)
         loss.backward()
+
         optimizer.step()
 
         if (batch_idx % args.log_interval == 0 or
@@ -146,17 +168,23 @@ def main():
                         help='set a fixed step size used in quantizer')
     parser.add_argument('--transform', action='store_true',
                         help='add a transform layer')
+    parser.add_argument('--grad-approx', type=int, default=0,
+                        help='option for grad approximation')
     parser.add_argument('--save-model', help='save the trained model')
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
 
-    global delta
-    if args.delta:
+    if args.delta is not None:
+        global delta
         delta = args.delta
 
-    global transform
     if args.transform:
+        global transform
         transform = args.transform
+
+    if args.grad_approx is not None:
+        global grad_approx
+        grad_approx = args.grad_approx
 
     # use CUDA if available
     use_cuda = torch.cuda.is_available()
