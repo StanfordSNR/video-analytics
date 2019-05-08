@@ -17,6 +17,7 @@ delta = None
 transform = False
 device = None
 grad_approx = 0
+autoencoder = False
 
 
 class Floor(torch.autograd.Function):
@@ -52,19 +53,24 @@ class Floor(torch.autograd.Function):
 class Transform(nn.Module):
     def __init__(self):
         super(Transform, self).__init__()
-        self.linear = nn.Linear(8*8, 8*8)
+        self.weight = nn.Parameter(torch.randn(64, 64))
+        self.bias = nn.Parameter(torch.randn(64))
 
     def forward(self, x):
         # divide each 32*32 image into 4*4 macroblocks of size 8*8
+        y = x.clone()
+
         for i in range(4):
             for j in range(4):
                 mb = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)].clone()
                 mb = mb.view(x.shape[0], x.shape[1], 8*8)
-                mb = self.linear(mb)
-                mb = mb.view(x.shape[0], x.shape[1], 8, 8)
-                x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = mb
 
-        return x
+                mb = F.linear(mb, self.weight, self.bias)
+
+                mb = mb.view(x.shape[0], x.shape[1], 8, 8)
+                y[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = mb
+
+        return y
 
 
 class QuantizeNet(nn.Module):
@@ -82,9 +88,34 @@ class QuantizeNet(nn.Module):
     def forward(self, x):
         if transform:
             x = self.transform(x)
+
         x = self.floor(x / self.delta)
         x = self.delta * (x + 0.5)
+
         return self.classifier(x)
+
+
+class AutoEncoder(nn.Module):
+    def __init__(self):
+        super(AutoEncoder, self).__init__()
+        if delta is None:
+            self.delta = nn.Parameter(1 - torch.rand(1))  # (0, 1]
+        else:
+            self.delta = delta
+
+        self.transform1 = Transform()
+        self.transform2 = Transform()
+        self.floor = Floor.apply
+
+    def forward(self, x):
+        x = self.transform1(x)
+
+        x = self.floor(x / self.delta)
+        x = self.delta * (x + 0.5)
+
+        x = self.transform2(x)
+
+        return x
 
 
 def imshow(img):
@@ -101,6 +132,8 @@ def train(args, model, train_loader, criterion, optimizer, epoch):
     total_data_cnt = 0
 
     for data, target in train_loader:
+        if autoencoder:
+            target = data
         data, target = data.to(device), target.to(device)
 
         batch_idx += 1
@@ -119,6 +152,7 @@ def train(args, model, train_loader, criterion, optimizer, epoch):
                   epoch, total_data_cnt, len(train_loader.dataset),
                   100.0 * total_data_cnt / len(train_loader.dataset),
                   loss.item()))
+
             if delta is None:
                 print('Delta: {:.3f}, Gradient: {:.3f}'.format(
                       model.delta.item(), model.delta.grad.item()))
@@ -149,6 +183,25 @@ def test(args, model, test_loader, criterion):
           100.0 * correct / len(test_loader.dataset)))
 
 
+def test_autoencoder(args, model, test_loader, criterion):
+    model.eval()
+
+    test_loss = 0
+
+    with torch.no_grad():
+        for data, target in test_loader:
+            target = data
+            data, target = data.to(device), target.to(device)
+
+            output = model(data)
+            # sum up batch loss
+            test_loss += criterion(output, target).item()
+
+    test_loss /= len(test_loader.dataset)
+
+    print('Test set: Average loss: {:.4f}'.format(test_loss))
+
+
 def main():
     # training settings
     parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Example')
@@ -170,6 +223,7 @@ def main():
                         help='add a transform layer')
     parser.add_argument('--grad-approx', type=int, default=0,
                         help='option for grad approximation')
+    parser.add_argument('--autoencoder', action='store_true')
     parser.add_argument('--save-model', help='save the trained model')
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
@@ -185,6 +239,10 @@ def main():
     if args.grad_approx is not None:
         global grad_approx
         grad_approx = args.grad_approx
+
+    if args.autoencoder is not None:
+        global autoencoder
+        autoencoder = True
 
     # use CUDA if available
     use_cuda = torch.cuda.is_available()
@@ -210,14 +268,22 @@ def main():
         batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
     # initialize model
-    model = QuantizeNet(ResNet18())
+    if autoencoder:
+        model = AutoEncoder()
+        criterion = nn.MSELoss()
+    else:
+        model = QuantizeNet(ResNet18())
+        criterion = nn.CrossEntropyLoss()
+
     model = model.to(device)
-    criterion = nn.CrossEntropyLoss()
 
     # inference only
     if args.load_model:
         model.load_state_dict(torch.load(args.load_model))
-        test(args, model, test_loader, criterion)
+        if autoencoder:
+            test_autoencoder(args, model, test_loader, criterion)
+        else:
+            test(args, model, test_loader, criterion)
         return
 
     # training
@@ -225,7 +291,11 @@ def main():
                           lr=args.lr, momentum=args.momentum)
     for epoch in range(1, args.epochs + 1):
         train(args, model, train_loader, criterion, optimizer, epoch)
-        test(args, model, test_loader, criterion)
+
+        if autoencoder:
+            test_autoencoder(args, model, test_loader, criterion)
+        else:
+            test(args, model, test_loader, criterion)
 
     if args.save_model:
         torch.save(model.state_dict(), args.save_model)
