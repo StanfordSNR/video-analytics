@@ -51,10 +51,19 @@ class Floor(torch.autograd.Function):
 
 
 class Transform(nn.Module):
-    def __init__(self):
+    def __init__(self, init_transform=None, clamp=None):
         super(Transform, self).__init__()
-        self.linear = nn.Linear(8*8, 8*8)
-        #torch.nn.init.eye_(self.linear)
+        
+        self.weight = nn.Parameter(torch.randn(8,8))
+        self.bias = nn.Parameter(torch.randn(8))
+        self.clamp = clamp
+        if self.clamp is not None:
+            print("clamp is set to be: ", self.clamp);
+
+        if init_transform == 'identity':       
+            print("using Identity transform for initialization")
+            self.weight = nn.Parameter(torch.eye(8))
+            self.bias = nn.Parameter(torch.zeros(8))
 
     def forward(self, x):
         # divide each 32*32 image into 4*4 macroblocks of size 8*8
@@ -62,7 +71,9 @@ class Transform(nn.Module):
             for j in range(4):
                 mb = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)].clone()
                 mb = mb.view(x.shape[0], x.shape[1], 8*8)
-                mb = self.linear(mb)
+                mb = F.linear(mb, self.weight, self.bias)
+                if self.clamp is not None:
+                    mb = F.clamp(mb,-args.clamp,args.clamp)			
                 mb = mb.view(x.shape[0], x.shape[1], 8, 8)
                 x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = mb
 
@@ -70,14 +81,14 @@ class Transform(nn.Module):
 
 
 class QuantizeNet(nn.Module):
-    def __init__(self, classifier):
+    def __init__(self, classifier, args):
         super(QuantizeNet, self).__init__()
         if delta is None:
             self.delta = nn.Parameter(1 - torch.rand(1))  # (0, 1]
         else:
             self.delta = delta
 
-        self.transform = Transform()  # custom transform
+        self.transform = Transform( init_transform=args.init_transform, clamp=args.clamp)  # custom transform
         self.floor = Floor.apply  # custom floor function
         self.classifier = classifier  # original classifier on CIFAR-10
 
@@ -115,7 +126,8 @@ def train(args, model, train_loader, criterion, optimizer, epoch, writer):
         loss.backward()
         
         if args.gradient_clip is not None:
-            torch.nn.utils.clip_grad_norm_(model.delta, args.gradient_clip)
+            torch.nn.utils.clip_grad_norm_(model.transform.parameters(), args.gradient_clip)
+            #torch.nn.utils.clip_grad_norm_(model.delta, args.gradient_clip)
        
         optimizer.step()
 
@@ -184,6 +196,10 @@ def main():
                         help='value to be used for clipping')
     parser.add_argument('--gpu-id', type=float, default=7,
                         help='id of the gpu to be used')
+    parser.add_argument('--clamp', type=float, default=None,
+                        help='transform clamp value')
+    parser.add_argument('--init-transform', type=str, default='rand',
+                        help='type of initialization for the transform')
     parser.add_argument('--save-model', help='save the trained model')
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
@@ -200,7 +216,7 @@ def main():
         global grad_approx
         grad_approx = args.grad_approx
 
-    torch.set_num_threads(5)
+    torch.set_num_threads(1)
 
     # use CUDA if available
     use_cuda = torch.cuda.is_available()
@@ -211,7 +227,7 @@ def main():
     device = torch.device('cuda:' + str(args.gpu_id) if use_cuda else 'cpu')
     
     # Create a tensorboard writer
-    writer = SummaryWriter("./.logs/gradapprox_" + str(args.grad_approx)+ "/clip_" + str(args.gradient_clip))
+    writer = SummaryWriter("./.logs/clamp/delta_" + str(args.delta) + "/gradapprox_" + str(args.grad_approx) + "/clip_gradients_" + str(args.gradient_clip))
 
     # load CIFAR-10 dataset
     train_loader = torch.utils.data.DataLoader(
@@ -232,7 +248,7 @@ def main():
         batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
     # initialize model
-    model = QuantizeNet(ResNet18())
+    model = QuantizeNet(ResNet18(), args)
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
 
