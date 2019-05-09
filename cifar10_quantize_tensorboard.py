@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
+from torch.utils.tensorboard import SummaryWriter
 
 from models import *
 
@@ -96,7 +97,7 @@ def imshow(img):
     plt.show()
 
 
-def train(args, model, train_loader, criterion, optimizer, epoch):
+def train(args, model, train_loader, criterion, optimizer, epoch, writer):
     model.train()
 
     batch_idx = 0
@@ -112,7 +113,10 @@ def train(args, model, train_loader, criterion, optimizer, epoch):
         output = model(data)
         loss = criterion(output, target)
         loss.backward()
-
+        
+        if args.gradient_clip is not None:
+            torch.nn.utils.clip_grad_norm_(model.delta, args.gradient_clip)
+       
         optimizer.step()
 
         if (batch_idx % args.log_interval == 0 or
@@ -121,12 +125,15 @@ def train(args, model, train_loader, criterion, optimizer, epoch):
                   epoch, total_data_cnt, len(train_loader.dataset),
                   100.0 * total_data_cnt / len(train_loader.dataset),
                   loss.item()))
+            global_step = total_data_cnt + len(train_loader.dataset)*epoch
+            writer.add_scalar("loss",loss.item(), global_step=global_step);
             if delta is None:
                 print('Delta: {:.3f}, Gradient: {:.3f}'.format(
                       model.delta.item(), model.delta.grad.item()))
+                writer.add_scalar("delta",model.delta.item(), global_step=global_step);
 
 
-def test(args, model, test_loader, criterion):
+def test(args, model, test_loader, criterion, epoch, train_dataset_size, writer):
     model.eval()
 
     test_loss = 0
@@ -145,10 +152,11 @@ def test(args, model, test_loader, criterion):
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
-
+    test_accuracy = 100.0 * correct / len(test_loader.dataset) 
     print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)'.format(
-          test_loss, correct, len(test_loader.dataset),
-          100.0 * correct / len(test_loader.dataset)))
+          test_loss, correct, len(test_loader.dataset), test_accuracy
+          ))
+    writer.add_scalar("test-accuracy",test_accuracy, global_step=(epoch+1)*train_dataset_size);
 
 
 def main():
@@ -164,7 +172,7 @@ def main():
                         help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
-    parser.add_argument('--log-interval', type=int, default=100, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='batches to wait before logging training status')
     parser.add_argument('--delta', type=float,
                         help='set a fixed step size used in quantizer')
@@ -172,6 +180,10 @@ def main():
                         help='add a transform layer')
     parser.add_argument('--grad-approx', type=int, default=0,
                         help='option for grad approximation')
+    parser.add_argument('--gradient-clip', type=float, default=None,
+                        help='value to be used for clipping')
+    parser.add_argument('--gpu-id', type=float, default=7,
+                        help='id of the gpu to be used')
     parser.add_argument('--save-model', help='save the trained model')
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
@@ -196,7 +208,10 @@ def main():
     print("using cuda: ", use_cuda);
 
     global device
-    device = torch.device('cuda:0' if use_cuda else 'cpu')
+    device = torch.device('cuda:' + str(args.gpu_id) if use_cuda else 'cpu')
+    
+    # Create a tensorboard writer
+    writer = SummaryWriter("./.logs/gradapprox_" + str(args.grad_approx)+ "/clip_" + str(args.gradient_clip))
 
     # load CIFAR-10 dataset
     train_loader = torch.utils.data.DataLoader(
@@ -205,7 +220,9 @@ def main():
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])),
-        batch_size=args.batch_size, shuffle=True, **kwargs)
+        batch_size=args.batch_size, shuffle=True, **kwargs) 
+    train_dataset_size = len(train_loader.dataset)
+
     test_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10('./data', train=False, download=True,
             transform=transforms.Compose([
@@ -220,17 +237,17 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # inference only
-    if args.load_model:
-        model.load_state_dict(torch.load(args.load_model))
-        test(args, model, test_loader, criterion)
-        return
+    #if args.load_model:
+    #    model.load_state_dict(torch.load(args.load_model))
+    #    test(args, model, test_loader, criterion)
+    #    return
 
     # training
     optimizer = optim.SGD(model.parameters(),
                           lr=args.lr, momentum=args.momentum)
     for epoch in range(1, args.epochs + 1):
-        train(args, model, train_loader, criterion, optimizer, epoch)
-        test(args, model, test_loader, criterion)
+        train(args, model, train_loader, criterion, optimizer, epoch, writer)
+        test(args, model, test_loader, criterion, epoch, train_dataset_size, writer)
 
     if args.save_model:
         torch.save(model.state_dict(), args.save_model)
