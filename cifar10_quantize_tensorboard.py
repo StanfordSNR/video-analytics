@@ -51,19 +51,19 @@ class Floor(torch.autograd.Function):
 
 
 class Transform(nn.Module):
-    def __init__(self, init_transform=None, clamp=None):
+    def __init__(self, init_transform=None):
         super(Transform, self).__init__()
         
-        self.weight = nn.Parameter(torch.randn(8,8))
-        self.bias = nn.Parameter(torch.randn(8))
-        self.clamp = clamp
-        if self.clamp is not None:
-            print("clamp is set to be: ", self.clamp);
+        self.weight = nn.Parameter(torch.randn(8*8,8*8))
+        self.bias = nn.Parameter(torch.randn(8*8))
+        #self.clamp = clamp
+        #if self.clamp is not None:
+        #    print("clamp is set to be: ", self.clamp);
 
         if init_transform == 'identity':       
             print("using Identity transform for initialization")
-            self.weight = nn.Parameter(torch.eye(8))
-            self.bias = nn.Parameter(torch.zeros(8))
+            self.weight = nn.Parameter(torch.eye(8*8))
+            self.bias = nn.Parameter(torch.zeros(8*8))
 
     def forward(self, x):
         # divide each 32*32 image into 4*4 macroblocks of size 8*8
@@ -72,8 +72,8 @@ class Transform(nn.Module):
                 mb = x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)].clone()
                 mb = mb.view(x.shape[0], x.shape[1], 8*8)
                 mb = F.linear(mb, self.weight, self.bias)
-                if self.clamp is not None:
-                    mb = F.clamp(mb,-args.clamp,args.clamp)			
+                #if self.clamp is not None:
+                    #mb = F.clamp(mb,-args.clamp,args.clamp)			
                 mb = mb.view(x.shape[0], x.shape[1], 8, 8)
                 x[:, :, 8*i:8*(i+1), 8*j:8*(j+1)] = mb
 
@@ -88,16 +88,21 @@ class QuantizeNet(nn.Module):
         else:
             self.delta = delta
 
-        self.transform = Transform( init_transform=args.init_transform, clamp=args.clamp)  # custom transform
+        self.clamp = args.clamp
+
+        self.transform = Transform( init_transform=args.init_transform)  # custom transform
         self.floor = Floor.apply  # custom floor function
         self.classifier = classifier  # original classifier on CIFAR-10
+        self.quantized_output = None;
 
     def forward(self, x):
         if transform:
             x = self.transform(x)
-            x = torch.clamp(x,min=-1.0,max=1.0)
+            if self.clamp is not None:
+                x = torch.clamp(x,min=-self.clamp,max=self.clamp)
         x = self.floor(x / self.delta)
         x = self.delta * (x + 0.5)
+        self.quantized_output = x.data;
         return self.classifier(x)
 
 
@@ -126,23 +131,29 @@ def train(args, model, train_loader, criterion, optimizer, epoch, writer):
         loss.backward()
         
         if args.gradient_clip is not None:
-            torch.nn.utils.clip_grad_norm_(model.transform.parameters(), args.gradient_clip)
-            #torch.nn.utils.clip_grad_norm_(model.delta, args.gradient_clip)
+            if args.transform:
+                torch.nn.utils.clip_grad_norm_(model.transform.parameters(), args.gradient_clip)
+            
+            if args.delta is None:
+                torch.nn.utils.clip_grad_norm_(model.delta, args.gradient_clip)
        
         optimizer.step()
 
         if (batch_idx % args.log_interval == 0 or
                 total_data_cnt == len(train_loader.dataset)):
-            print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}'.format(
-                  epoch, total_data_cnt, len(train_loader.dataset),
-                  100.0 * total_data_cnt / len(train_loader.dataset),
-                  loss.item()))
+            #print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}'.format(
+            #      epoch, total_data_cnt, len(train_loader.dataset),
+            #      100.0 * total_data_cnt / len(train_loader.dataset),
+            #      loss.item()))
             global_step = total_data_cnt + len(train_loader.dataset)*epoch
             writer.add_scalar("loss",loss.item(), global_step=global_step);
+
             if delta is None:
-                print('Delta: {:.3f}, Gradient: {:.3f}'.format(
-                      model.delta.item(), model.delta.grad.item()))
+                #print('Delta: {:.3f}, Gradient: {:.3f}'.format(
+                #      model.delta.item(), model.delta.grad.item()))
                 writer.add_scalar("delta",model.delta.item(), global_step=global_step);
+    print('Delta: {:.3f}, Gradient: {:.3f}'.format(
+        model.delta.item(), model.delta.grad.item()))
 
 
 def test(args, model, test_loader, criterion, epoch, train_dataset_size, writer):
@@ -168,7 +179,8 @@ def test(args, model, test_loader, criterion, epoch, train_dataset_size, writer)
     print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)'.format(
           test_loss, correct, len(test_loader.dataset), test_accuracy
           ))
-    writer.add_scalar("test-accuracy",test_accuracy, global_step=(epoch+1)*train_dataset_size);
+    writer.add_scalar("test-accuracy",test_accuracy, global_step=(epoch+1));
+    writer.add_histogram("quantized_output",model.quantized_output, global_step =(epoch+1)); 
 
 
 def main():
@@ -204,11 +216,13 @@ def main():
     parser.add_argument('--load-model', help='load a trained model')
     args = parser.parse_args()
 
+    print(args)
     if args.delta is not None:
         global delta
         delta = args.delta
 
     if args.transform:
+        print("Using a transform ...");
         global transform
         transform = args.transform
 
@@ -227,7 +241,7 @@ def main():
     device = torch.device('cuda:' + str(args.gpu_id) if use_cuda else 'cpu')
     
     # Create a tensorboard writer
-    writer = SummaryWriter("./.logs/clamp/delta_" + str(args.delta) + "/gradapprox_" + str(args.grad_approx) + "/clip_gradients_" + str(args.gradient_clip))
+    writer = SummaryWriter("./.logs_may13/toy_problem" + "/gradapprox_" + str(args.grad_approx) + "/gradient_clip_" + str(args.gradient_clip) + "/batch_" + str(args.batch_size))
 
     # load CIFAR-10 dataset
     train_loader = torch.utils.data.DataLoader(

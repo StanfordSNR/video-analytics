@@ -1,0 +1,104 @@
+Namespace(batch_size=256, clamp=0.99, delta=None, epochs=50, gpu_id=7.0, grad_approx=4, gradient_clip=None, init_transform='rand', load_model=None, log_interval=10, lr=0.01, momentum=0.9, save_model=None, test_batch_size=1000, transform=False)
+using cuda:  True
+Files already downloaded and verified
+Files already downloaded and verified
+Delta: 0.179, Gradient: -0.067
+Test set: Average loss: 0.0012, Accuracy: 5805/10000 (58.05%)
+Delta: -9.699, Gradient: -0.006
+Test set: Average loss: 0.0012, Accuracy: 5737/10000 (57.37%)
+Delta: -9.540, Gradient: -0.009
+Test set: Average loss: 0.0013, Accuracy: 5764/10000 (57.64%)
+Delta: -9.391, Gradient: -0.007
+Test set: Average loss: 0.0011, Accuracy: 6260/10000 (62.60%)
+Delta: -9.258, Gradient: -0.010
+Test set: Average loss: 0.0012, Accuracy: 6035/10000 (60.35%)
+Delta: -9.137, Gradient: -0.005
+Test set: Average loss: 0.0014, Accuracy: 6036/10000 (60.36%)
+Delta: -9.036, Gradient: -0.011
+Test set: Average loss: 0.0013, Accuracy: 6295/10000 (62.95%)
+Delta: -8.953, Gradient: -0.003
+Test set: Average loss: 0.0013, Accuracy: 6350/10000 (63.50%)
+Delta: -8.881, Gradient: -0.004
+Test set: Average loss: 0.0017, Accuracy: 6023/10000 (60.23%)
+Delta: -8.828, Gradient: -0.006
+Test set: Average loss: 0.0017, Accuracy: 6341/10000 (63.41%)
+Delta: -8.792, Gradient: -0.001
+Test set: Average loss: 0.0016, Accuracy: 6364/10000 (63.64%)
+Delta: -8.766, Gradient: 0.001
+Test set: Average loss: 0.0016, Accuracy: 6496/10000 (64.96%)
+Delta: -8.749, Gradient: 0.003
+Test set: Average loss: 0.0017, Accuracy: 6543/10000 (65.43%)
+Delta: -8.732, Gradient: -0.000
+Test set: Average loss: 0.0018, Accuracy: 6554/10000 (65.54%)
+Delta: -8.722, Gradient: -0.002
+Test set: Average loss: 0.0018, Accuracy: 6555/10000 (65.55%)
+Delta: -8.718, Gradient: -0.000
+Test set: Average loss: 0.0016, Accuracy: 6731/10000 (67.31%)
+Delta: -8.717, Gradient: -0.000
+Test set: Average loss: 0.0016, Accuracy: 6826/10000 (68.26%)
+Delta: -8.716, Gradient: -0.000
+Test set: Average loss: 0.0016, Accuracy: 6806/10000 (68.06%)
+Delta: -8.716, Gradient: 0.000
+Test set: Average loss: 0.0016, Accuracy: 6829/10000 (68.29%)
+Delta: -8.715, Gradient: -0.000
+Test set: Average loss: 0.0016, Accuracy: 6823/10000 (68.23%)
+Delta: -8.715, Gradient: -0.000
+Test set: Average loss: 0.0016, Accuracy: 6828/10000 (68.28%)
+Delta: -8.715, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6830/10000 (68.30%)
+Delta: -8.715, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6832/10000 (68.32%)
+Delta: -8.715, Gradient: -0.000
+Test set: Average loss: 0.0016, Accuracy: 6848/10000 (68.48%)
+Delta: -8.714, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6815/10000 (68.15%)
+Delta: -8.714, Gradient: 0.000
+Test set: Average loss: 0.0016, Accuracy: 6823/10000 (68.23%)
+Delta: -8.714, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6833/10000 (68.33%)
+Delta: -8.714, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6841/10000 (68.41%)
+Delta: -8.714, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6840/10000 (68.40%)
+Delta: -8.714, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6834/10000 (68.34%)
+Delta: -8.714, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6841/10000 (68.41%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6794/10000 (67.94%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6804/10000 (68.04%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6818/10000 (68.18%)
+Delta: -8.713, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6840/10000 (68.40%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6822/10000 (68.22%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6818/10000 (68.18%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6831/10000 (68.31%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6830/10000 (68.30%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6820/10000 (68.20%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6827/10000 (68.27%)
+Delta: -8.713, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6801/10000 (68.01%)
+Delta: -8.713, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6821/10000 (68.21%)
+Delta: -8.713, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6827/10000 (68.27%)
+Delta: -8.713, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6816/10000 (68.16%)
+Delta: -8.712, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6827/10000 (68.27%)
+Delta: -8.712, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6823/10000 (68.23%)
+Delta: -8.712, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6844/10000 (68.44%)
+Delta: -8.712, Gradient: -0.000
+Test set: Average loss: 0.0017, Accuracy: 6825/10000 (68.25%)
+Delta: -8.712, Gradient: 0.000
+Test set: Average loss: 0.0017, Accuracy: 6810/10000 (68.10%)
